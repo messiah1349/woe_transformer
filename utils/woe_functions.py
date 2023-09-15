@@ -156,7 +156,7 @@ class WoeTransformer:
             self.default_flag_name: ['sum', 'size']
         }
 
-        pre_woe_gr = pre_woe_df.groupby('bucket_intervals').agg(agg)
+        pre_woe_gr = pre_woe_df.groupby('bucket_intervals', observed=False).agg(agg)
         pre_woe_gr.columns = ['minVal', 'maxVal', 'bads', 'total']
         pre_woe_gr['badRate'] = pre_woe_gr['bads'] / pre_woe_gr['bads'].sum()
         pre_woe_gr['goods'] = pre_woe_gr['total'] - pre_woe_gr['bads']

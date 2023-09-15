@@ -9,10 +9,9 @@ import sklearn.metrics as metrics
 from sklearn.model_selection import train_test_split
 import lightgbm
 import matplotlib.pyplot as plt
-import shap
 from statsmodels.stats.proportion import proportion_confint
 
-from woe_functions import WoeTransformer, check_index
+from .woe_functions import WoeTransformer, check_index
 
 
 def merge_default_flag_with_features(default_flg_df: pd.DataFrame, features_df: pd.DataFrame) -> pd.DataFrame:
@@ -24,7 +23,7 @@ def splitting(data: pd.DataFrame, default_flg: pd.DataFrame, test_size=.3, rs=18
 
     default_flag_name = default_flg.columns[0]
     y = data_mer[default_flag_name]
-    X = data_mer.drop(default_flag_name, 1)
+    X = data_mer.drop(default_flag_name, axis=1)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=rs)
 
@@ -195,7 +194,7 @@ class Model:
         score_table_train = pd.DataFrame({'y': self.y_train, 'pr': self.pr_train}).set_index(
             self.y_train.index)
         score_table_train['test_flg'] = 0
-        self.score_table = pd.concat([score_table_train,score_table_test], 0).sort_values('pr', ascending=False)
+        self.score_table = pd.concat([score_table_train,score_table_test], axis=0).sort_values('pr', ascending=False)
 
     def calc_score_bucket_train(self, num_buck=5):
         train_scores = self.score_table[self.score_table['test_flg']==0]
@@ -231,9 +230,7 @@ class SimpleLGM(Model):
 
     def fit_lgb(self, params):
         evals_result = {}
-        model = lightgbm.train(params, self.lgtrain, 10000, valid_sets=[self.lgtest], early_stopping_rounds=100,
-                               verbose_eval=20,
-                               evals_result=evals_result)
+        model = lightgbm.train(params, self.lgtrain, 10000, valid_sets=[self.lgtest])
 
         self.lgb = model
         self._calc_preds()
@@ -243,15 +240,15 @@ class SimpleLGM(Model):
             .sort_values('fi', ascending=False)
         return fi
 
-    def draw_shap(self):
-        background_adult = shap.maskers.Independent(self.X_train_cat, max_samples=100)
-        explainer = shap.Explainer(self.lgb, background_adult)
-        shap_values = explainer(self.X_train_cat)
-
-        # set a display version of the data to use for plotting (has string values)
-        shap_values.display_data = shap.datasets.adult(display=True)[0].values
-
-        shap.plots.beeswarm(shap_values, max_display=14)
+#    def draw_shap(self):
+#        background_adult = shap.maskers.Independent(self.X_train_cat, max_samples=100)
+#        explainer = shap.Explainer(self.lgb, background_adult)
+#        shap_values = explainer(self.X_train_cat)
+#
+#        # set a display version of the data to use for plotting (has string values)
+#        shap_values.display_data = shap.datasets.adult(display=True)[0].values
+#
+#        shap.plots.beeswarm(shap_values, max_display=14)
 
 
 class LogReg(Model):
@@ -388,8 +385,8 @@ class ModelPipeline(Model):
         if self.woe_columns is None:
             self.woe_columns = self.top_lgb_features
 
-        self.X = pd.concat([self.X_train, self.X_test], 0)
-        self.y = pd.concat([self.y_train, self.y_test], 0).to_frame()
+        self.X = pd.concat([self.X_train, self.X_test], axis=0)
+        self.y = pd.concat([self.y_train, self.y_test], axis=0).to_frame()
 
         self.woe = WoeTransformer(self.X, self.woe_columns, self.y, 'classification',
                                   self.woe_user_borders, **self.woe_kwargs)
