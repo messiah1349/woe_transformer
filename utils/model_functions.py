@@ -102,7 +102,7 @@ def get_score_bucket_table(score_table: pd.DataFrame, num_buck: int, score_colum
     return score_gr
 
 
-def check_interval_entry(value: Any, interval: Any) -> bool:
+def check_interval_entry(value: float|str, interval: pd.Interval|str) -> bool:
 
     # categorical case
     if isinstance(value, str):
@@ -114,9 +114,14 @@ def check_interval_entry(value: Any, interval: Any) -> bool:
     # number case
     if interval == 'nul' and (np.isnan(value) or value is None):
         return True
-    if interval != 'nul' and not np.isnan(value) and value in interval:
-        return True
-    else:
+    try:
+
+        if interval != 'nul' and not np.isnan(value) and value in interval:
+            return True
+        else:
+            return False
+    except TypeError:
+        print(f"{interval=}, {value=}")
         return False
 
 
@@ -186,13 +191,17 @@ class Model:
         roc_curve(self.pr_train, self.y_train)
         roc_curve(self.pr_test, self.y_test)
 
-    def calc_score_table(self):
+    def calc_score_table(self, pr_column: pd.Series|None = None):
 
-        score_table_test = pd.DataFrame({'y': self.y_test, 'pr': self.pr_test}).set_index(
-            self.y_test.index)
+        if pr_column is None:
+            return
+            pr_column = pd.concat([self.pr_test, self.pr_train])
+
+        score_table_test = self.y_test.to_frame().join(pr_column, how='left')
+        score_table_test.columns = ['y', 'pr']
         score_table_test['test_flg'] = 1
-        score_table_train = pd.DataFrame({'y': self.y_train, 'pr': self.pr_train}).set_index(
-            self.y_train.index)
+
+        score_table_train = self.y_train.to_frame().join(pr_column, how='left')
         score_table_train['test_flg'] = 0
         self.score_table = pd.concat([score_table_train,score_table_test], axis=0).sort_values('pr', ascending=False)
 
@@ -324,7 +333,7 @@ class LogReg(Model):
             lambda row: check_interval_entry(row['value'], row['bucket_intervals']), axis=1)
 
         fin_score = \
-            src_melt[src_melt['interval_entry']].pivot_table(index='order_key', values='score_value',
+            src_melt[src_melt['interval_entry']].pivot_table(index=ix_name, values='score_value',
                                                                  columns='column_name')
         fin_score.columns = [col + '_point' for col in fin_score.columns]
         fin_score['intercept'] = intercept

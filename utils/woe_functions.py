@@ -142,6 +142,41 @@ class WoeTransformer:
             woe_values = pd.DataFrame()
 
         return woe_values, woe_table
+    
+    @staticmethod
+    def apply_woe_dict(x: float, woe_dict: dict[pd.Interval, float]) -> float:
+        for interval in woe_dict:
+            if x in interval:
+                return woe_dict[interval]
+        
+        min_interval = min(woe_dict.keys(), key=lambda x: x.left)
+        max_interval = max(woe_dict.keys(), key=lambda x: x.left)
+
+        if x < min_interval.left:
+            return woe_dict[min_interval]
+        
+        return woe_dict[max_interval]
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+
+        df_tansform = pd.DataFrame()
+
+        for column_name in self.features:
+            if not column_name in df:
+                raise KeyError(f"no column '{column_name}' in dataset")
+            
+            column_woe_table = self.woe_table
+            column_woe_table = column_woe_table[column_woe_table['column_name'] == column_name]
+            woe_dict = column_woe_table.set_index('bucket_intervals')['WOE'].to_dict()
+
+            if self.train_df[column_name].dtype == 'O':
+                df_tansform[column_name] = df[column_name].apply(lambda x: \
+                                                woe_dict[x] if x in woe_dict else max(woe_dict.values())).astype('float')
+            else:
+                df_tansform[column_name] = df[column_name].apply(self.apply_woe_dict, args=(woe_dict,))
+
+        return df_tansform
+
 
     def _calc_woe_table(self, pre_woe_df: pd.DataFrame, column_name: str) -> pd.DataFrame:
         """
